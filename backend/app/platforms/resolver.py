@@ -4,6 +4,7 @@ from app.platforms.bilibili import BilibiliAdapter
 from app.platforms.douyin import DouyinAdapter
 from app.platforms.tiktok import TikTokAdapter
 from app.platforms.xiaohongshu import XiaohongshuAdapter
+from app.platforms.youtube import YouTubeAdapter
 
 
 class PlatformResolver:
@@ -13,13 +14,14 @@ class PlatformResolver:
             DouyinAdapter(),
             TikTokAdapter(),
             XiaohongshuAdapter(),
+            YouTubeAdapter(),
         ]
 
     def resolve(self, url: str) -> PlatformInfo:
         for adapter in self.adapters:
             if adapter.matches(url):
                 return adapter.resolve(url)
-        raise UnsupportedPlatformError("Only Bilibili, Douyin, TikTok and Xiaohongshu links are supported.")
+        raise UnsupportedPlatformError("Only Bilibili, Douyin, TikTok, Xiaohongshu and YouTube links are supported.")
 
 
 platform_resolver = PlatformResolver()

@@ -38,6 +38,11 @@ _PLATFORM_FORMAT = {
         "body_style": "punchy",
         "hash_prefix": "#",
     },
+    "youtube": {
+        "emoji_title": False,
+        "body_style": "detailed",
+        "hash_prefix": "#",
+    },
 }
 
 _STYLE_KEYWORDS = {
@@ -242,6 +247,7 @@ class CopyGenerator:
             "douyin": ["抖音", "热门"],
             "bilibili": ["B站", "干货分享"],
             "tiktok": ["fyp", "viral"],
+            "youtube": ["YouTube", "Shorts"],
         }
         tags.extend(platform_tags.get(platform, [])[:1])
 

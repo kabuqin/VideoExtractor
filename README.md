@@ -4,7 +4,7 @@
 
 ## 功能特性
 
-- **多平台支持**：B站 / 抖音 / TikTok / 小红书链接自动识别
+- **多平台支持**：B站 / 抖音 / TikTok / 小红书 / YouTube 链接自动识别
 - **视频下载**：使用 yt-dlp 下载公开视频，保存元数据（标题、作者、时长、封面）
 - **语音转文字**：使用 faster-whisper 本地模型将视频音频转为文字（无需 FFmpeg）
 - **文案生成**：基于模板规则自动生成平台风格文案（标题、摘要、正文、标签），无需 AI API
@@ -73,7 +73,7 @@ backend/
     core/            配置和异常定义
     db/              数据库连接
     models/          SQLModel 数据模型（Task, Video, Transcript, Copy）
-    platforms/       平台识别适配器（B站/抖音/TikTok/小红书）
+    platforms/       平台识别适配器（B站/抖音/TikTok/小红书/YouTube）
     schemas/         API 请求/响应 Schema
     services/        业务服务
       downloader.py        视频下载（yt-dlp）
@@ -122,6 +122,7 @@ LLM_MODEL=gpt-4o-mini
 | B站 | `https://b23.tv/xxx` 或 `https://www.bilibili.com/video/BVxxx` |
 | TikTok | `https://www.tiktok.com/@user/video/xxx` |
 | 小红书 | `https://www.xiaohongshu.com/explore/xxx` |
+| YouTube | `https://www.youtube.com/watch?v=xxx` 或 `https://youtu.be/xxx` |
 
 ## 限制说明
 
@@ -129,96 +130,3 @@ LLM_MODEL=gpt-4o-mini
 - 首次运行会自动下载 Whisper 模型（约 150MB），之后使用本地缓存
 - 语音转文字使用 CPU 模式，较长视频处理可能需要几分钟
 - 当前使用 FastAPI BackgroundTasks 后台执行，适合单用户使用
-# 短视频文案生成器
-
-本项目是一个本地单用户短视频文案生成工具。第一阶段已经搭好 FastAPI 后端、SQLite 任务表、平台识别适配层，以及 Next.js Web 工作台。
-
-## 当前能力
-
-- 创建任务：输入 B站 / 抖音 / TikTok / 小红书链接
-- 自动识别来源平台
-- 保存任务到本地 SQLite
-- 查看任务列表和任务详情
-- 在任务详情页触发 `yt-dlp` 视频下载
-- 保存视频标题、作者、时长、封面、本地路径和关键元数据
-- 下载完成后任务状态会停在 `video_downloaded`，等待下一阶段音频提取
-- 预留本地 `faster-whisper`、FFmpeg、下载和导出模块边界
-
-## 后端启动
-
-```bash
-cd backend
-python -m venv .venv
-.venv\Scripts\activate
-pip install -e .
-uvicorn app.main:app --reload
-```
-
-后端默认地址：
-
-```text
-http://localhost:8000
-```
-
-健康检查：
-
-```text
-http://localhost:8000/health
-```
-
-## 前端启动
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-前端默认地址：
-
-```text
-http://localhost:3000
-```
-
-## 项目结构
-
-```text
-backend/
-  app/
-    api/          FastAPI 路由
-    core/         配置和异常
-    db/           数据库连接
-    models/       SQLModel 数据模型
-    platforms/    平台识别适配器
-    schemas/      API schema
-    services/     后续媒体和文本服务
-    tasks/        后续异步流水线
-frontend/
-  app/            Next.js 页面
-  components/     UI 组件
-  lib/            API client 和类型
-storage/
-  videos/
-  audios/
-  transcripts/
-  exports/
-  models/
-```
-
-## 下一阶段
-
-阶段三建议实现：
-
-1. 接入 FFmpeg，提取 Whisper 友好音频。
-2. 接入 `faster-whisper` 本地模型识别字幕。
-3. 把当前同步触发的下载流程迁移到 Celery 后台任务。
-
-## 下载说明
-
-任务详情页的“开始下载视频”会调用：
-
-```text
-POST /api/tasks/{task_id}/start
-```
-
-当前阶段使用 `yt-dlp` 能力下载公开视频。对于私密、付费、地区限制、平台限制或需要登录授权的内容，系统会将任务标记为失败并保存错误信息。
