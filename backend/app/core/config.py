@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     llm_model: str = "gpt-4o-mini"
     llm_timeout_seconds: int = 120
 
+    # YouTube Cookie Configuration (optional)
+    # Export cookies from browser using extension like "Get cookies.txt LOCALLY"
+    # Save as Netscape format and place path here
+    youtube_cookies_file: str = ""
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 

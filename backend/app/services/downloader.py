@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
+from app.core.config import settings
 from app.core.exceptions import DownloadError, SubtitleExtractionError
 from app.storage.path_manager import path_manager
 
@@ -42,6 +43,15 @@ class YtDlpDownloader:
             "subtitleslangs": ["zh-Hans", "zh", "zh-CN", "en"],
             "subtitlesformat": "vtt/srt/best",
         }
+
+        # Add YouTube cookies if configured
+        cookies_file = settings.youtube_cookies_file
+        if cookies_file and Path(cookies_file).exists():
+            options["cookies"] = cookies_file
+        elif cookies_file:
+            from app.core.exceptions import DownloadError
+            raise DownloadError(f"YouTube cookies file not found: {cookies_file}")
+
         ydl = self._build_ydl(options)
         metadata = self._extract_info(ydl, url)
         video_path = self._resolve_downloaded_path(ydl, metadata)
