@@ -1,0 +1,28 @@
+[project]
+name = "short-video-copywriter-backend"
+version = "0.1.0"
+description = "Local backend for short video copywriting workflow."
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.111.0",
+    "uvicorn[standard]>=0.30.0",
+    "sqlmodel>=0.0.21",
+    "pydantic-settings>=2.3.0",
+    "yt-dlp>=2025.1.0",
+    "httpx>=0.27.0",
+    "faster-whisper>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2.0",
+    "ruff>=0.5.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
