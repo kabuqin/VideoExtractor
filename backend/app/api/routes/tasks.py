@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 from uuid import UUID
 
@@ -11,12 +12,35 @@ from app.platforms.resolver import platform_resolver
 from app.schemas.task import TaskCreate, TaskCreated, TaskRead
 from app.tasks.video_pipeline import run_pipeline
 
+
+# Supported video URL patterns for auto-extraction from share text
+_VIDEO_URL_PATTERNS = [
+    re.compile(r"https?://v\.douyin\.com/[\w-]+/?"),
+    re.compile(r"https?://www\.douyin\.com/video/[\d]+"),
+    re.compile(r"https?://www\.bilibili\.com/video/BV[\w]+"),
+    re.compile(r"https?://b23\.tv/[\w]+"),
+    re.compile(r"https?://www\.tiktok\.com/@[\w.]+/video/[\d]+"),
+    re.compile(r"https?://www\.xiaohongshu\.com/explore/[\w]+"),
+    re.compile(r"https?://www\.youtube\.com/watch\?v=[\w-]+"),
+    re.compile(r"https?://youtu\.be/[\w-]+"),
+]
+
+
+def _extract_url(text: str) -> str:
+    """Extract the first video URL from arbitrary text (handles Douyin share text etc.)."""
+    for pattern in _VIDEO_URL_PATTERNS:
+        match = pattern.search(text)
+        if match:
+            return match.group(0)
+    return text
+
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
 
 @router.post("", response_model=TaskCreated, status_code=201)
 def create_task(payload: TaskCreate, session: DbSession) -> TaskCreated:
-    source_url = str(payload.url)
+    # Auto-extract URL from arbitrary paste text (Douyin share format, etc.)
+    source_url = _extract_url(str(payload.url))
     try:
         platform_info = platform_resolver.resolve(source_url)
         status = TaskStatus.CHECKING_PLATFORM

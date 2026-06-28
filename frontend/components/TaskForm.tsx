@@ -1,8 +1,27 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useState, ClipboardEvent } from "react";
 
 import { createTask } from "@/lib/api";
+
+/** Extract first video URL from arbitrary text (handles Douyin share text etc.) */
+function extractUrl(text: string): string {
+  const patterns = [
+    /https?:\/\/v\.douyin\.com\/[\w-]+\/?/,
+    /https?:\/\/www\.douyin\.com\/video\/[\d]+/,
+    /https?:\/\/www\.bilibili\.com\/video\/BV[\w]+/,
+    /https?:\/\/b23\.tv\/[\w]+/,
+    /https?:\/\/www\.tiktok\.com\/@[\w.]+\/video\/[\d]+/,
+    /https?:\/\/www\.xiaohongshu\.com\/explore\/[\w]+/,
+    /https?:\/\/www\.youtube\.com\/watch\?v=[\w-]+/,
+    /https?:\/\/youtu\.be\/[\w-]+/,
+  ];
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match) return match[0];
+  }
+  return text;
+}
 
 type Props = {
   onCreated: () => void;
@@ -44,11 +63,19 @@ export function TaskForm({ onCreated }: Props) {
         <label htmlFor="url">视频链接</label>
         <input
           id="url"
-          placeholder="粘贴 B站 / 抖音 / TikTok / 小红书链接"
+          placeholder="粘贴 B站 / 抖音 / TikTok / 小红书链接（支持直接粘贴分享文本）"
           required
-          type="url"
+          type="text"
           value={url}
           onChange={(event) => setUrl(event.target.value)}
+          onPaste={(event: ClipboardEvent<HTMLInputElement>) => {
+            const pasted = event.clipboardData.getData("text");
+            const extracted = extractUrl(pasted);
+            if (extracted !== pasted) {
+              event.preventDefault();
+              setUrl(extracted);
+            }
+          }}
         />
       </div>
 

@@ -1,12 +1,17 @@
+import asyncio
+import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 from uuid import UUID
 
 from app.core.config import settings
 from app.core.exceptions import DownloadError, SubtitleExtractionError
 from app.storage.path_manager import path_manager
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -26,6 +31,125 @@ class YtDlpDownloader:
     def fetch_metadata(self, url: str) -> dict[str, Any]:
         ydl = self._build_ydl({"skip_download": True})
         return self._extract_info(ydl, url)
+
+    def _try_extract_with_browser_cookies(self, url: str, options: dict[str, Any]) -> tuple[Any, dict[str, Any]]:
+        """Try extracting with browser cookies, falling back through multiple browsers.
+
+        Browser order: configured browser → chrome → edge → firefox.
+        If all fail, proceeds without cookies (logs warning).
+        """
+        configured = settings.browser_cookies
+        if not configured:
+            ydl = self._build_ydl(options)
+            return ydl, self._extract_info(ydl, url)
+
+        # Build browser try order: configured first, then fallbacks
+        fallbacks = ["chrome", "edge", "firefox"]
+        browser_order = [configured]
+        for fb in fallbacks:
+            if fb not in browser_order:
+                browser_order.append(fb)
+
+        for i, browser in enumerate(browser_order):
+            try:
+                opts = {**options, "cookiesfrombrowser": (browser,)}
+                ydl = self._build_ydl(opts)
+                return ydl, self._extract_info(ydl, url)
+            except Exception as e:
+                if i < len(browser_order) - 1:
+                    next_browser = browser_order[i + 1]
+                    logger.warning(
+                        "Browser cookies from '%s' failed, trying '%s': %s",
+                        browser, next_browser, e,
+                    )
+                else:
+                    logger.warning(
+                        "All browsers failed, trying manual cookies file: %s", e,
+                    )
+
+        # Fallback: try manual cookies file
+        cookies_file = settings.cookies_file
+        if cookies_file and Path(cookies_file).exists():
+            logger.info("Using manual cookies file: %s", cookies_file)
+            opts = {**options, "cookies": cookies_file}
+            ydl = self._build_ydl(opts)
+            return ydl, self._extract_info(ydl, url)
+        elif cookies_file:
+            logger.warning("Manual cookies file not found: %s", cookies_file)
+
+        # Final fallback: no cookies
+        logger.warning("Proceeding without cookies")
+        ydl = self._build_ydl(options)
+        return ydl, self._extract_info(ydl, url)
+
+    @staticmethod
+    def _is_douyin_url(url: str) -> bool:
+        host = urlparse(url).netloc.lower()
+        return "douyin.com" in host or host == "v.douyin.com"
+
+    def _try_douyin_fallback(self, url: str, task_id: UUID) -> DownloadedVideo | None:
+        """Try custom Douyin extractor as fallback when yt-dlp fails."""
+        if not self._is_douyin_url(url):
+            return None
+
+        try:
+            from app.platforms.douyin_extractor import DouyinExtractor
+
+            cookies_file = settings.cookies_file
+            if cookies_file and not Path(cookies_file).exists():
+                cookies_file = None
+
+            logger.info("Trying custom Douyin extractor (Playwright)...")
+            extractor = DouyinExtractor(cookies_file=cookies_file)
+
+            # Use SAME event loop for both extract and close (Playwright WebSocket is loop-bound)
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                info = loop.run_until_complete(extractor.extract(url))
+
+                logger.info("Douyin extractor got video: %s by %s", info.title, info.author)
+
+                # Generate output path
+                output_dir = settings.storage_root / "videos" / str(task_id)
+                output_dir.mkdir(parents=True, exist_ok=True)
+                output_path = output_dir / "video.mp4"
+
+                # Download the video from CDN URL
+                success = extractor.download_video(info.video_url, str(output_path))
+
+                if not success or not output_path.exists():
+                    logger.error("Douyin video download failed")
+                    return None
+
+                file_size = output_path.stat().st_size
+                logger.info("Douyin video saved: %s (%d bytes)", output_path, file_size)
+
+                return DownloadedVideo(
+                    title=info.title,
+                    author=info.author,
+                    duration=info.duration,
+                    thumbnail_url=info.thumbnail_url,
+                    video_path=str(output_path),
+                    description=info.description,
+                    subtitle_paths=[],
+                    metadata={
+                        "extractor": "DouyinExtractor",
+                        "video_url": info.video_url,
+                    },
+                )
+            finally:
+                try:
+                    loop.run_until_complete(extractor.close())
+                finally:
+                    loop.close()
+
+        except ImportError as e:
+            logger.warning("Playwright not available, cannot use Douyin fallback: %s", e)
+            return None
+        except Exception as e:
+            logger.warning("Custom Douyin extractor failed: %s", e)
+            return None
 
     def download(self, url: str, task_id: UUID) -> DownloadedVideo:
         output_template = path_manager.video_output_template(task_id)
@@ -49,11 +173,22 @@ class YtDlpDownloader:
         if cookies_file and Path(cookies_file).exists():
             options["cookies"] = cookies_file
         elif cookies_file:
-            from app.core.exceptions import DownloadError
             raise DownloadError(f"YouTube cookies file not found: {cookies_file}")
 
-        ydl = self._build_ydl(options)
-        metadata = self._extract_info(ydl, url)
+        # Try browser cookies with automatic fallback across browsers
+        try:
+            ydl, metadata = self._try_extract_with_browser_cookies(url, options)
+        except DownloadError as e:
+            # If yt-dlp fails for Douyin, try custom fallback
+            if self._is_douyin_url(url):
+                logger.warning("yt-dlp failed for Douyin, trying Playwright fallback: %s", e)
+                result = self._try_douyin_fallback(url, task_id)
+                if result:
+                    return result
+                # Fallback failed too, re-raise original error
+                raise
+            raise
+
         video_path = self._resolve_downloaded_path(ydl, metadata)
 
         # Collect subtitle files and extract description

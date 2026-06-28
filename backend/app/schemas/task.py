@@ -1,13 +1,13 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel
 
 from app.models.task import TaskStatus
 
 
 class TaskCreate(BaseModel):
-    url: HttpUrl
+    url: str
     target_platform: str = "xiaohongshu"
     style: str = "knowledge"
     language: str = "auto"
