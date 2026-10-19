@@ -2,16 +2,32 @@ import type {
   Copy,
   CopyUpdatePayload,
   CreateTaskPayload,
+  ParseResult,
   RewritePayload,
   Task,
+  TaskCreated,
   Transcript,
   TranscriptUpdatePayload,
   Video,
 } from "./types";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api";
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8001/api";
 
-export async function createTask(payload: CreateTaskPayload): Promise<{ task_id: string }> {
+export async function parseVideo(url: string): Promise<ParseResult> {
+  const response = await fetch(`${API_BASE}/parse`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+
+  return response.json();
+}
+
+export async function createTask(payload: CreateTaskPayload): Promise<TaskCreated> {
   const response = await fetch(`${API_BASE}/tasks`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

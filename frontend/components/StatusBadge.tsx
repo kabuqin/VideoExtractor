@@ -24,18 +24,8 @@ type Props = {
 
 export function StatusBadge({ status }: Props) {
   const label = STATUS_LABELS[status] ?? status;
-  const isFailed = status === "failed";
-  const isCompleted = status === "completed";
+  const tone =
+    status === "failed" ? "failed" : status === "completed" ? "completed" : "active";
 
-  return (
-    <span
-      className="status"
-      style={{
-        background: isFailed ? "#fef3f2" : isCompleted ? "#ecfdf5" : undefined,
-        color: isFailed ? "#b42318" : isCompleted ? "#065f46" : undefined,
-      }}
-    >
-      {label}
-    </span>
-  );
+  return <span className={`status status-${tone}`}>{label}</span>;
 }

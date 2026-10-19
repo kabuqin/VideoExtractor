@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID
 
@@ -106,7 +106,7 @@ def run_pipeline(task_id: UUID) -> Task:
             transcript = existing_transcript or Transcript(task_id=task.id)
             transcript.raw_text = transcribed_text or None
             transcript.segmented_text = description_text or None
-            transcript.updated_at = datetime.utcnow()
+            transcript.updated_at = datetime.now(timezone.utc)
             session.add(transcript)
             session.commit()
 
@@ -137,7 +137,7 @@ def run_pipeline(task_id: UUID) -> Task:
                 copy.style = task.style
                 session.add(copy)
 
-                task.completed_at = datetime.utcnow()
+                task.completed_at = datetime.now(timezone.utc)
                 _update_task(
                     session, task, TaskStatus.COMPLETED, 100, "处理完成"
                 )
@@ -192,7 +192,7 @@ def _update_task(
     task.progress = progress
     task.current_step = current_step
     task.error_message = None
-    task.updated_at = datetime.utcnow()
+    task.updated_at = datetime.now(timezone.utc)
     session.add(task)
     session.commit()
 
@@ -201,6 +201,6 @@ def _fail_task(session: Session, task: Task, message: str) -> None:
     task.status = TaskStatus.FAILED
     task.current_step = "管线失败"
     task.error_message = message
-    task.updated_at = datetime.utcnow()
+    task.updated_at = datetime.now(timezone.utc)
     session.add(task)
     session.commit()

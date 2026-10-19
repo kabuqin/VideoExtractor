@@ -13,6 +13,7 @@ class TaskCreate(BaseModel):
     language: str = "auto"
     whisper_model: str = "small"
     whisper_device: str = "auto"
+    auto_start: bool = True
 
 
 class TaskRead(BaseModel):

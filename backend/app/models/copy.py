@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 from sqlalchemy import Column
@@ -16,5 +16,5 @@ class Copy(SQLModel, table=True):
     platform: str = "xiaohongshu"
     style: str = "knowledge"
     prompt_version: str = "v1"
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 

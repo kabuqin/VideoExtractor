@@ -54,7 +54,7 @@ export function CopyPanel({ copy, onRewrite, onSave, isRewriting, isSaving }: Pr
   return (
     <div className="panel">
       <div className="panel-header">
-        <h2>AI 文案</h2>
+        <h2>平台文案</h2>
         <span className="platform-tag">{platformLabel}</span>
       </div>
 

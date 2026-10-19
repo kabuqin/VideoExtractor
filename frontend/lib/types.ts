@@ -43,6 +43,24 @@ export type CreateTaskPayload = {
   whisper_device: string;
 };
 
+export type ParseResult = {
+  supported: boolean;
+  source_url: string;
+  platform: string | null;
+  normalized_url: string | null;
+  title: string | null;
+  author: string | null;
+  duration: number | null;
+  thumbnail_url: string | null;
+  description: string | null;
+  error: string | null;
+};
+
+export type TaskCreated = {
+  task_id: string;
+  status: TaskStatus;
+};
+
 export type Video = {
   id: string;
   task_id: string;

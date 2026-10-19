@@ -3,8 +3,9 @@ import "./globals.css";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "短视频文案生成器",
-  description: "本地单用户短视频字幕识别与文案生成工具",
+  title: "VideoExtractor · 免费视频解析去水印工具",
+  description:
+    "粘贴视频链接，自动解析并下载 B站、抖音、TikTok、小红书、YouTube 视频，本地语音转写并生成平台文案。",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -14,4 +15,3 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     </html>
   );
 }
-

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException
@@ -48,7 +48,7 @@ def update_transcript(
         raise HTTPException(status_code=404, detail="Transcript not found")
 
     transcript.edited_text = payload.edited_text
-    transcript.updated_at = datetime.utcnow()
+    transcript.updated_at = datetime.now(timezone.utc)
     session.add(transcript)
     session.commit()
     session.refresh(transcript)

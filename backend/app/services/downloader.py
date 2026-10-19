@@ -32,6 +32,48 @@ class YtDlpDownloader:
         ydl = self._build_ydl({"skip_download": True})
         return self._extract_info(ydl, url)
 
+    def probe_metadata(self, url: str) -> DownloadedVideo:
+        """Resolve video metadata without downloading the media file."""
+        options = {
+            "skip_download": True,
+            "noplaylist": True,
+            "socket_timeout": 20,
+        }
+
+        cookies_file = settings.youtube_cookies_file
+        if cookies_file and Path(cookies_file).exists():
+            options["cookies"] = cookies_file
+
+        try:
+            _, metadata = self._try_extract_with_browser_cookies(url, options)
+        except DownloadError:
+            if self._is_douyin_url(url):
+                try:
+                    info = self._extract_douyin_info(url)
+                except Exception as exc:
+                    logger.warning("Douyin metadata probe failed: %s", exc)
+                else:
+                    return DownloadedVideo(
+                        title=info.title,
+                        author=info.author,
+                        duration=info.duration,
+                        thumbnail_url=info.thumbnail_url,
+                        video_path=None,
+                        description=info.description,
+                        metadata={"extractor": "DouyinExtractor"},
+                    )
+            raise
+
+        return DownloadedVideo(
+            title=metadata.get("title"),
+            author=metadata.get("uploader") or metadata.get("channel") or metadata.get("creator"),
+            duration=self._safe_int(metadata.get("duration")),
+            thumbnail_url=metadata.get("thumbnail"),
+            video_path=None,
+            description=metadata.get("description"),
+            metadata=self._compact_metadata(metadata),
+        )
+
     def _try_extract_with_browser_cookies(self, url: str, options: dict[str, Any]) -> tuple[Any, dict[str, Any]]:
         """Try extracting with browser cookies, falling back through multiple browsers.
 
@@ -87,62 +129,68 @@ class YtDlpDownloader:
         host = urlparse(url).netloc.lower()
         return "douyin.com" in host or host == "v.douyin.com"
 
+    def _extract_douyin_info(self, url: str):
+        """Run the Playwright-based Douyin extractor (metadata + CDN URL)."""
+        from app.platforms.douyin_extractor import DouyinExtractor
+
+        cookies_file = settings.cookies_file
+        if cookies_file and not Path(cookies_file).exists():
+            cookies_file = None
+
+        extractor = DouyinExtractor(cookies_file=cookies_file)
+
+        # Use the SAME event loop for extract and close (Playwright WebSocket is loop-bound)
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            return loop.run_until_complete(extractor.extract(url))
+        finally:
+            try:
+                loop.run_until_complete(extractor.close())
+            finally:
+                loop.close()
+
     def _try_douyin_fallback(self, url: str, task_id: UUID) -> DownloadedVideo | None:
         """Try custom Douyin extractor as fallback when yt-dlp fails."""
         if not self._is_douyin_url(url):
             return None
 
         try:
+            logger.info("Trying custom Douyin extractor (Playwright)...")
+            info = self._extract_douyin_info(url)
+
+            logger.info("Douyin extractor got video: %s by %s", info.title, info.author)
+
+            # Generate output path
+            output_dir = settings.storage_root / "videos" / str(task_id)
+            output_dir.mkdir(parents=True, exist_ok=True)
+            output_path = output_dir / "video.mp4"
+
+            # Download the video from CDN URL
             from app.platforms.douyin_extractor import DouyinExtractor
 
-            cookies_file = settings.cookies_file
-            if cookies_file and not Path(cookies_file).exists():
-                cookies_file = None
+            success = DouyinExtractor().download_video(info.video_url, str(output_path))
 
-            logger.info("Trying custom Douyin extractor (Playwright)...")
-            extractor = DouyinExtractor(cookies_file=cookies_file)
+            if not success or not output_path.exists():
+                logger.error("Douyin video download failed")
+                return None
 
-            # Use SAME event loop for both extract and close (Playwright WebSocket is loop-bound)
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                info = loop.run_until_complete(extractor.extract(url))
+            file_size = output_path.stat().st_size
+            logger.info("Douyin video saved: %s (%d bytes)", output_path, file_size)
 
-                logger.info("Douyin extractor got video: %s by %s", info.title, info.author)
-
-                # Generate output path
-                output_dir = settings.storage_root / "videos" / str(task_id)
-                output_dir.mkdir(parents=True, exist_ok=True)
-                output_path = output_dir / "video.mp4"
-
-                # Download the video from CDN URL
-                success = extractor.download_video(info.video_url, str(output_path))
-
-                if not success or not output_path.exists():
-                    logger.error("Douyin video download failed")
-                    return None
-
-                file_size = output_path.stat().st_size
-                logger.info("Douyin video saved: %s (%d bytes)", output_path, file_size)
-
-                return DownloadedVideo(
-                    title=info.title,
-                    author=info.author,
-                    duration=info.duration,
-                    thumbnail_url=info.thumbnail_url,
-                    video_path=str(output_path),
-                    description=info.description,
-                    subtitle_paths=[],
-                    metadata={
-                        "extractor": "DouyinExtractor",
-                        "video_url": info.video_url,
-                    },
-                )
-            finally:
-                try:
-                    loop.run_until_complete(extractor.close())
-                finally:
-                    loop.close()
+            return DownloadedVideo(
+                title=info.title,
+                author=info.author,
+                duration=info.duration,
+                thumbnail_url=info.thumbnail_url,
+                video_path=str(output_path),
+                description=info.description,
+                subtitle_paths=[],
+                metadata={
+                    "extractor": "DouyinExtractor",
+                    "video_url": info.video_url,
+                },
+            )
 
         except ImportError as e:
             logger.warning("Playwright not available, cannot use Douyin fallback: %s", e)
@@ -175,9 +223,13 @@ class YtDlpDownloader:
         elif cookies_file:
             raise DownloadError(f"YouTube cookies file not found: {cookies_file}")
 
+        ffmpeg_location = self._ffmpeg_location()
+        if ffmpeg_location:
+            options["ffmpeg_location"] = ffmpeg_location
+
         # Try browser cookies with automatic fallback across browsers
         try:
-            ydl, metadata = self._try_extract_with_browser_cookies(url, options)
+            ydl, metadata = self._download_with_retry(url, options)
         except DownloadError as e:
             # If yt-dlp fails for Douyin, try custom fallback
             if self._is_douyin_url(url):
@@ -206,6 +258,36 @@ class YtDlpDownloader:
             subtitle_lang=subtitle_lang,
             metadata=self._compact_metadata(metadata),
         )
+
+    def _download_with_retry(self, url: str, options: dict[str, Any]):
+        try:
+            return self._try_extract_with_browser_cookies(url, options)
+        except DownloadError as exc:
+            if "ffmpeg" not in str(exc).lower():
+                raise
+            # Merging separate video/audio streams requires ffmpeg; degrade to a
+            # single-file format so the pipeline still works without it.
+            logger.warning("FFmpeg not available, retrying with single-file format")
+            fallback_options = {**options, "format": "best[ext=mp4]/best"}
+            fallback_options.pop("merge_output_format", None)
+            try:
+                return self._try_extract_with_browser_cookies(url, fallback_options)
+            except DownloadError:
+                raise exc
+
+    @staticmethod
+    def _ffmpeg_location() -> str | None:
+        """Return the ffmpeg binary bundled with imageio-ffmpeg, if installed."""
+        try:
+            import imageio_ffmpeg
+        except ImportError:
+            return None
+
+        try:
+            return imageio_ffmpeg.get_ffmpeg_exe()
+        except Exception as exc:
+            logger.warning("Could not resolve bundled ffmpeg: %s", exc)
+            return None
 
     def _build_ydl(self, options: dict[str, Any]):
         try:
