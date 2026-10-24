@@ -209,11 +209,6 @@ class YtDlpDownloader:
             "retries": 3,
             "fragment_retries": 5,
             "socket_timeout": 30,
-            # Subtitle download options
-            "writesubtitles": True,
-            "writeautomaticsub": True,
-            "subtitleslangs": ["zh-Hans", "zh", "zh-CN", "en"],
-            "subtitlesformat": "vtt/srt/best",
         }
 
         # Add YouTube cookies if configured
@@ -243,6 +238,8 @@ class YtDlpDownloader:
 
         video_path = self._resolve_downloaded_path(ydl, metadata)
 
+        self._try_download_subtitles(url, options)
+
         # Collect subtitle files and extract description
         subtitle_paths, subtitle_lang = self._collect_subtitle_paths(video_path)
         description = metadata.get("description")
@@ -258,6 +255,21 @@ class YtDlpDownloader:
             subtitle_lang=subtitle_lang,
             metadata=self._compact_metadata(metadata),
         )
+
+    def _try_download_subtitles(self, url: str, options: dict[str, Any]) -> None:
+        """Fetch subtitles separately so failures fall back to transcription."""
+        subtitle_options = {
+            **options,
+            "skip_download": True,
+            "writesubtitles": True,
+            "writeautomaticsub": True,
+            "subtitleslangs": ["zh-Hans", "zh", "zh-CN", "en"],
+            "subtitlesformat": "vtt/srt/best",
+        }
+        try:
+            self._try_extract_with_browser_cookies(url, subtitle_options)
+        except Exception as exc:
+            logger.warning("Subtitle download failed, continuing without subtitles: %s", exc)
 
     def _download_with_retry(self, url: str, options: dict[str, Any]):
         try:

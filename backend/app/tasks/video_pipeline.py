@@ -1,4 +1,5 @@
 import logging
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID
@@ -17,8 +18,33 @@ from app.services.transcription import transcription_service
 
 logger = logging.getLogger(__name__)
 
+_running_tasks: set[UUID] = set()
+_running_tasks_lock = threading.Lock()
 
-def run_pipeline(task_id: UUID) -> Task:
+
+def is_task_running(task_id: UUID) -> bool:
+    with _running_tasks_lock:
+        return task_id in _running_tasks
+
+
+def run_pipeline(task_id: UUID) -> Task | None:
+    """Start the pipeline once per task, ignoring duplicate triggers."""
+    with _running_tasks_lock:
+        if task_id in _running_tasks:
+            logger.warning(
+                "Pipeline already running for task %s; skipping duplicate start", task_id
+            )
+            return None
+        _running_tasks.add(task_id)
+
+    try:
+        return _run_pipeline(task_id)
+    finally:
+        with _running_tasks_lock:
+            _running_tasks.discard(task_id)
+
+
+def _run_pipeline(task_id: UUID) -> Task:
     """Run the full pipeline: download → extract audio → transcribe → save transcript → generate copy."""
     with Session(engine) as session:
         task = session.get(Task, task_id)
@@ -52,9 +78,8 @@ def run_pipeline(task_id: UUID) -> Task:
             else:
                 # Step 1: Resolve metadata and download video
                 _update_task(session, task, TaskStatus.RESOLVING_URL, 10, "解析视频元数据")
-                downloaded = downloader.download(task.normalized_url or task.source_url, task.id)
-
                 _update_task(session, task, TaskStatus.DOWNLOADING_VIDEO, 30, "下载视频")
+                downloaded = downloader.download(task.normalized_url or task.source_url, task.id)
 
                 # Step 2: Save video record
                 video = existing_video or Video(task_id=task.id)

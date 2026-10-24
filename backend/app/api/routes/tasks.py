@@ -10,7 +10,7 @@ from app.core.urls import extract_video_url
 from app.models.task import Task, TaskStatus
 from app.platforms.resolver import platform_resolver
 from app.schemas.task import TaskCreate, TaskCreated, TaskRead
-from app.tasks.video_pipeline import run_pipeline
+from app.tasks.video_pipeline import is_task_running, run_pipeline
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -77,6 +77,8 @@ def start_task(
     # Allow re-running for failed or partially completed tasks
     if task.status == TaskStatus.COMPLETED:
         raise HTTPException(status_code=409, detail="Task already completed")
+    if is_task_running(task_id):
+        raise HTTPException(status_code=409, detail="Task is already running")
     # Reset error state so pipeline can re-run
     task.error_message = None
     task.status = TaskStatus.CHECKING_PLATFORM

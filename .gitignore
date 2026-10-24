@@ -10,6 +10,8 @@ node_modules/
 dist/
 build/
 .env
+.env.local
+*cookies.txt
 data/
 backend/data/
 storage/videos/*

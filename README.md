@@ -25,6 +25,10 @@
 | :---: |
 | ![任务详情](screenshots/task-detail.png) |
 
+| YouTube · 链接解析 | YouTube · 转录与文案 |
+| :---: | :---: |
+| ![YouTube 解析](screenshots/youtube-parse.png) | ![YouTube 任务详情](screenshots/youtube-task-detail.png) |
+
 ---
 
 ## 功能特性

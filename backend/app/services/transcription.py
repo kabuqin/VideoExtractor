@@ -4,6 +4,8 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
+from app.core.config import settings
+
 logger = logging.getLogger(__name__)
 
 
@@ -21,8 +23,8 @@ class TranscriptionService:
     so FFmpeg is not required.
     """
 
-    def __init__(self, model_size: str = "base"):
-        self._model_size = model_size
+    def __init__(self, model_size: str | None = None):
+        self._model_size = model_size or settings.whisper_model
         self._model = None
 
     def _get_model(self):
@@ -33,8 +35,8 @@ class TranscriptionService:
                 logger.info("Loading Whisper model: %s", self._model_size)
                 self._model = WhisperModel(
                     self._model_size,
-                    device="cpu",
-                    compute_type="int8",
+                    device=settings.whisper_device,
+                    compute_type=settings.whisper_compute_type,
                 )
                 logger.info("Whisper model loaded successfully")
             except ImportError as exc:
